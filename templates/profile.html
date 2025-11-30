@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-4 mb-4">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">Gestionare Mașini</div>
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label class="form-label">Număr Înmatriculare</label>
+                            <input type="text" name="plate_number" class="form-control" placeholder="B 123 ABC" required>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">Adaugă Mașină</button>
+                    </form>
+                    
+                    <hr>
+                    <h6>Mașinile tale:</h6>
+                    <ul class="list-group">
+                        {% for car in current_user.cars %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                {{ car.plate_number }}
+                                <a href="{{ url_for('delete_car', car_id=car.id) }}" class="btn btn-sm btn-danger">X</a>
+                            </li>
+                        {% else %}
+                            <li class="list-group-item text-muted">Nicio mașină adăugată.</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-secondary text-white">Istoric Rezervări</div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Locație</th>
+                                    <th>Mașină</th>
+                                    <th>Început</th>
+                                    <th>Sfârșit</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for res in reservations %}
+                                <tr>
+                                    <td>{{ res.spot.name }}</td>
+                                    <td>{{ res.owner_car.plate_number if res.owner_car else '?' }}</td>
+                                    <td>{{ res.start_time.strftime('%Y-%m-%d %H:%M') }}</td>
+                                    <td>{{ res.end_time.strftime('%Y-%m-%d %H:%M') }}</td>
+                                    <td>
+                                        {% if res.end_time > now %}
+                                            <span class="badge bg-success">Activ</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Expirat</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center">Nu ai rezervări.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

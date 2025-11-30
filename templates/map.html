@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div id="map-container">
+    <div id="map"></div>
+    
+    <div style="position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 1000; display: flex; gap: 10px;">
+        <button class="btn btn-park btn-lg shadow" onclick="locateUser()">
+            <i class="bi bi-crosshair"></i> Parchează Aici (GPS)
+        </button>
+        <button class="btn btn-light btn-lg shadow text-primary" onclick="enableManualPin()">
+            <i class="bi bi-pin-map-fill"></i> Rezervă Manual
+        </button>
+        {% if current_user.is_admin %}
+        <button class="btn btn-warning btn-lg shadow" id="adminAddMode" onclick="toggleAdminMode()">
+            <i class="bi bi-plus-circle"></i> Mod Adăugare Locuri
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+<div class="modal fade" id="reserveModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Rezervă Loc de Parcare</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                {% if current_user.is_authenticated %}
+                    {% if current_user.cars|length > 0 %}
+                        <form id="reservationForm">
+                            <input type="hidden" id="spotIdInput">
+                            <input type="hidden" id="latInput">
+                            <input type="hidden" id="lngInput">
+                            <input type="hidden" id="isNewLocation" value="false">
+
+                            <div class="mb-3">
+                                <label class="form-label">Alege Mașina:</label>
+                                <select class="form-select" id="carSelect" required>
+                                    {% for car in current_user.cars %}
+                                        <option value="{{ car.id }}">{{ car.plate_number }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Durată:</label>
+                                <div class="btn-group w-100" role="group">
+                                    <input type="radio" class="btn-check" name="duration" id="d1" value="1" checked>
+                                    <label class="btn btn-outline-primary" for="d1">1h</label>
+                                    
+                                    <input type="radio" class="btn-check" name="duration" id="d3" value="3">
+                                    <label class="btn btn-outline-primary" for="d3">3h</label>
+                                    
+                                    <input type="radio" class="btn-check" name="duration" id="d12" value="12">
+                                    <label class="btn btn-outline-primary" for="d12">12h</label>
+                                    
+                                    <input type="radio" class="btn-check" name="duration" id="d24" value="24">
+                                    <label class="btn btn-outline-primary" for="d24">24h</label>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-success w-100" onclick="submitReservation()">Confirmă Rezervarea</button>
+                        </form>
+                    {% else %}
+                        <p class="text-danger">Nu ai adăugat nicio mașină în profil.</p>
+                        <a href="{{ url_for('profile') }}" class="btn btn-outline-primary">Adaugă Mașină</a>
+                    {% endif %}
+                {% else %}
+                    <p>Trebuie să fii autentificat pentru a rezerva.</p>
+                    <a href="{{ url_for('login') }}" class="btn btn-primary">Logare</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    var map = L.map('map', {
+        center: [44.4268, 26.1025],
+        zoom: 13,
+        minZoom: 11,
+        maxBounds: [[44.30, 25.90], [44.55, 26.25]] 
+    });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    var markers = {};
+    var manualPin = null;
+    var adminMode = false;
+
+    function loadSpots() {
+        fetch('/api/spots')
+            .then(response => response.json())
+            .then(data => {
+                data.forEach(spot => {
+                    var color = spot.status === 'free' ? 'green' : 'red';
+                    var icon = L.divIcon({
+                        className: 'custom-div-icon',
+                        html: `<div style="background-color:${color}; width:15px; height:15px; border-radius:50%; border:2px solid white;"></div>`,
+                        iconSize: [15, 15],
+                        iconAnchor: [7, 7]
+                    });
+
+                    var marker = L.marker([spot.lat, spot.lng], {icon: icon}).addTo(map);
+                    marker.bindPopup(`
+                        <b>${spot.name}</b><br>
+                        Status: ${spot.status === 'free' ? 'Liber' : 'Ocupat'}<br>
+                        ${spot.status === 'free' ? `<button class='btn btn-sm btn-primary mt-2' onclick='openReserveModal(${spot.id}, ${spot.lat}, ${spot.lng}, false)'>Rezervă</button>` : ''}
+                    `);
+                });
+            });
+    }
+    loadSpots();
+
+    function locateUser() {
+        if (!navigator.geolocation) {
+            alert("Browserul nu suportă geolocația.");
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(position => {
+            var lat = position.coords.latitude;
+            var lng = position.coords.longitude;
+            
+            if (lat < 44.30 || lat > 44.55 || lng < 25.90 || lng > 26.25) {
+                alert("Te afli în afara Bucureștiului. ParkSpot funcționează doar în București.");
+                return;
+            }
+
+            map.setView([lat, lng], 18);
+            L.marker([lat, lng]).addTo(map).bindPopup("Locația ta curentă").openPopup();
+            
+            // Deschide modal direct pentru locația curentă
+            openReserveModal(null, lat, lng, true);
+        }, () => {
+            alert("Nu am putut obține locația.");
+        }, { enableHighAccuracy: true });
+    }
+
+    function enableManualPin() {
+        alert("Apasă pe hartă pentru a pune pin-ul unde vrei să parchezi.");
+        map.on('click', function(e) {
+            if (manualPin) map.removeLayer(manualPin);
+            manualPin = L.marker(e.latlng, {draggable: true}).addTo(map);
+            manualPin.bindPopup(`<button class='btn btn-sm btn-primary' onclick='openReserveModal(null, ${e.latlng.lat}, ${e.latlng.lng}, true)'>Rezervă Aici</button>`).openPopup();
+            
+            map.off('click');
+        });
+    }
+
+    function openReserveModal(spotId, lat, lng, isNew) {
+        document.getElementById('spotIdInput').value = spotId || '';
+        document.getElementById('latInput').value = lat;
+        document.getElementById('lngInput').value = lng;
+        document.getElementById('isNewLocation').value = isNew;
+        
+        var myModal = new bootstrap.Modal(document.getElementById('reserveModal'));
+        myModal.show();
+    }
+
+    function submitReservation() {
+        const data = {
+            spot_id: document.getElementById('spotIdInput').value,
+            car_id: document.getElementById('carSelect').value,
+            duration: document.querySelector('input[name="duration"]:checked').value,
+            is_new_location: document.getElementById('isNewLocation').value === 'true',
+            lat: document.getElementById('latInput').value,
+            lng: document.getElementById('lngInput').value
+        };
+
+        fetch('/reserve', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        })
+        .then(res => res.json())
+        .then(data => {
+            alert(data.message);
+            location.reload();
+        });
+    }
+
+    function toggleAdminMode() {
+        adminMode = !adminMode;
+        const btn = document.getElementById('adminAddMode');
+        if (adminMode) {
+            btn.classList.remove('btn-warning');
+            btn.classList.add('btn-danger');
+            btn.innerHTML = "Oprește Mod Adăugare";
+            map.on('click', onAdminMapClick);
+            alert("Mod ADMIN activat: Click pe hartă pentru a adăuga un loc permanent.");
+        } else {
+            btn.classList.add('btn-warning');
+            btn.classList.remove('btn-danger');
+            btn.innerHTML = '<i class="bi bi-plus-circle"></i> Mod Adăugare Locuri';
+            map.off('click', onAdminMapClick);
+        }
+    }
+
+    function onAdminMapClick(e) {
+        let name = prompt("Numele locului de parcare (ex: Sector 3, Nr 44):");
+        if (name) {
+            fetch('/admin/add_spot', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: name, lat: e.latlng.lat, lng: e.latlng.lng})
+            }).then(() => {
+                loadSpots(); // Reîncarcă
+                alert("Loc adăugat!");
+            });
+        }
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container d-flex justify-content-center align-items-center" style="min-height: 80vh;">
+    <div class="card shadow p-4" style="width: 100%; max-width: 400px;">
+        <h3 class="text-center mb-4 text-primary">
+            {% if mode == 'login' %} Autentificare {% else %} Înregistrare {% endif %}
+        </h3>
+        
+        <form method="POST">
+            <div class="mb-3">
+                <label class="form-label">Adresă Email</label>
+                <input type="email" name="email" class="form-control" required placeholder="exemplu@email.com">
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Parolă</label>
+                <input type="password" name="password" class="form-control" required>
+            </div>
+
+            <button type="submit" class="btn btn-park w-100 mb-3">
+                {% if mode == 'login' %} Intră în cont {% else %} Creează cont {% endif %}
+            </button>
+        </form>
+
+        <div class="text-center">
+            {% if mode == 'login' %}
+                <p>Nu ai cont? <a href="{{ url_for('register') }}">Înregistrează-te</a></p>
+            {% else %}
+                <p>Ai deja cont? <a href="{{ url_for('login') }}">Loghează-te</a></p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
